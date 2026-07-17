@@ -1,0 +1,96 @@
+# Configuration for the Bayesian marketing-attribution demo.
+# Everything is deterministic given these values plus the fixed seeds. MCMC is
+# stochastic but seeded, so convergence and estimates are stable across runs.
+
+common:
+  n_days: 180          # total days of daily aggregated streams
+  campaign_start: 120  # first post-campaign day (index into the series)
+  ramp_days: 10        # days for the effect to ramp to the plateau
+
+# Scenario A: a stable or rising series that the campaign lifts further.
+growth:
+  seed: 20260702
+  n_good: 20           # co-moving similar-artist candidates
+  n_bad: 10            # unrelated candidates to be filtered out
+  trend_total: 0.15    # series rises 15 percent over the horizon (organic)
+  peak_lift: 0.15      # true sustained campaign lift (15 percent)
+  noise_scale: 0.03
+  base_level: 9000.0
+
+# Scenario B: a declining series (often the reason a campaign is run). The
+# campaign makes the decline less steep but does not turn it positive.
+decline:
+  seed: 13131313
+  n_good: 20
+  n_bad: 10
+  trend_total: -0.40   # series falls 40 percent over the horizon (organic)
+  peak_lift: 0.28      # true sustained campaign lift (28 percent)
+  noise_scale: 0.03
+  base_level: 11000.0
+
+# Long-history scenario used to demonstrate the annual / day-of-year component.
+# The pre-period spans more than a year, so the annual Fourier terms are added.
+annual_demo:
+  seed: 77000077
+  n_days: 540
+  campaign_start: 430  # pre-period 430 days (> 365), annual component INCLUDED
+  n_good: 18
+  n_bad: 8
+  trend_total: 0.12
+  peak_lift: 0.16
+  noise_scale: 0.03
+  base_level: 9500.0
+  # Here the annual signal is large and only half shared with donors, so the
+  # annual Fourier component (fitted because the pre-period exceeds a year) has
+  # to capture the treated-specific half. This is what the annual figure shows.
+  annual_amp: 0.12
+  donor_annual_frac: 0.5
+  donor_holiday_frac: 0.4
+
+# Donor selection thresholds (feature match then parallel-trends check).
+selection:
+  feature_top_k: 22
+  level_corr_threshold: 0.7
+  diff_corr_threshold: 0.1
+
+# Bayesian structural-time-series model.
+bayes:
+  donor_prior: normal        # normal (adaptive ridge), laplace, or horseshoe
+  donor_prior_scale: 1.0
+  weekly_harmonics: 2
+  annual_harmonics: 3
+  level_sigma_scale: 0.05    # HalfNormal scale of the random-walk innovation sd
+  draws: 1000
+  tune: 1000
+  chains: 2
+  target_accept: 0.95
+  seed: 20260707
+
+# Coverage / calibration study and the seasonality-aware vs blind comparison.
+validation:
+  n_campaigns: 40
+  seed: 4242
+  lift_range: [0.08, 0.30]
+  trend_range: [-0.40, 0.30]
+  noise_range: [0.025, 0.045]
+  base_range: [7000.0, 13000.0]
+  n_good: 15
+  n_bad: 6
+  draws: 400                 # lighter sampler for the many coverage fits
+  tune: 400
+
+# Multi-region hierarchical reconciliation (Bayesian per-region + MinT).
+regions:
+  seed: 909090
+  trend_total: -0.20        # regions are declining in this demo
+  donor_noise: 0.02
+  base_idio: 0.005          # small region-specific component present everywhere
+  weekly_amp: 0.06
+  mc_runs: 12               # Monte Carlo campaigns (Bayesian fits, kept modest)
+  region_names: [region_1, region_2, region_3, region_4, region_5]
+  volumes: [12000.0, 9000.0, 7000.0, 5000.0, 3000.0]
+  true_lifts: [0.10, 0.14, 0.12, 0.18, 0.25]
+  donor_counts: [16, 16, 4, 14, 4]
+  donor_quality: [0.05, 0.05, 0.22, 0.06, 0.26]
+  national_donors: 10
+  national_quality: 0.10

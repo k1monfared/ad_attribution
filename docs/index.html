@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bayesian ad attribution: seven-scenario explorer</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+  :root {
+    --ink: #1f2933;
+    --muted: #616e7c;
+    --line: #d7dde3;
+    --panel: #ffffff;
+    --bg: #f4f6f8;
+    --counter: #2f6f9f;
+    --band: #8fc0e0;
+    --effect: #c25a2b;
+    --accent: #2f6f9f;
+    --good: #3f8f5f;
+    --bad: #b3261e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 64px; }
+  header h1 { font-size: 1.5rem; margin: 0 0 6px; }
+  .intro { color: var(--muted); margin: 6px 0 22px; max-width: 780px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 2px solid var(--line); margin-bottom: 22px; }
+  .tab {
+    appearance: none; border: 1px solid var(--line); border-bottom: none;
+    background: #e9edf1; color: var(--muted); cursor: pointer;
+    padding: 8px 12px; font-size: 0.82rem; border-radius: 8px 8px 0 0;
+    margin-bottom: -2px;
+  }
+  .tab:hover { color: var(--ink); }
+  .tab.active { background: var(--panel); color: var(--ink); font-weight: 600; border-bottom: 2px solid var(--panel); }
+  .verdict {
+    background: var(--panel); border: 1px solid var(--line); border-left: 5px solid var(--accent);
+    border-radius: 8px; padding: 16px 18px; margin-bottom: 22px;
+  }
+  .verdict .tag { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 4px; }
+  .verdict p { margin: 0; font-size: 1.02rem; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin-bottom: 22px; }
+  .card h2 { font-size: 1.02rem; margin: 2px 0 4px; }
+  .card p.sub { margin: 0 0 10px; color: var(--muted); font-size: 0.86rem; }
+  .plot { width: 100%; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 820px) { .grid2 { grid-template-columns: 1fr; } }
+  table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
+  caption { text-align: left; font-weight: 600; padding: 8px 0 6px; font-size: 0.9rem; }
+  th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { color: var(--muted); font-weight: 600; border-bottom: 2px solid var(--line); }
+  tbody tr.total td { font-weight: 700; border-top: 2px solid var(--line); }
+  .ci { display: block; color: var(--muted); font-weight: 400; font-size: 0.74rem; }
+  p.tnote { color: var(--muted); font-size: 0.74rem; margin: 8px 0 0; }
+  p.tnote sup { color: var(--ink); }
+  details.weekfold { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; background: #fafbfc; }
+  details.weekfold summary { cursor: pointer; font-size: 0.84rem; font-weight: 600; color: var(--ink); list-style-position: inside; }
+  details.weekfold[open] summary { margin-bottom: 8px; }
+  .diag { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 6px 0 14px; }
+  .diag2 { grid-template-columns: repeat(2, 1fr); max-width: 360px; }
+  @media (max-width: 640px) { .diag { grid-template-columns: repeat(2, 1fr); } }
+  .stat { background: #f7f9fb; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+  .stat .k { font-size: 0.72rem; color: var(--muted); }
+  .stat .v { font-size: 1.05rem; font-weight: 700; }
+  .loading { color: var(--muted); padding: 40px 0; text-align: center; }
+  footer { color: var(--muted); font-size: 0.8rem; margin-top: 30px; border-top: 1px solid var(--line); padding-top: 14px; }
+  a { color: var(--counter); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Bayesian ad attribution: seven-scenario explorer</h1>
+    <p class="intro">Seven synthetic campaigns run through the same Bayesian structural time-series forecasting counterfactual. Each tab shows an honest plain-language verdict, the forecast with its credible interval and attributed area, the weekly and total numbers, and the Bayesian diagnostics behind them.</p>
+  </header>
+
+  <div class="tabs" id="tabs"></div>
+  <div id="content"><div class="loading">Loading scenarios...</div></div>
+
+  <footer>
+    Method: Bayesian structural time-series counterfactual (PyMC), donors as regressors with a local level and weekly seasonality. MCMC seeded, 2 chains, 800 draws. Data files under <code>docs/data/</code>.
+    <br>
+    <a href="https://github.com/k1monfared/ad_attribution">Source code on GitHub</a>
+  </footer>
+</div>
+
+<script>
+const C = {
+  ink: "#1f2933", muted: "#616e7c", counter: "#2f6f9f", band: "rgba(143,192,224,0.45)",
+  effect: "#c25a2b", effectFill: "rgba(194,90,43,0.28)", good: "#3f8f5f", bad: "#b3261e",
+  grid: "#e6e6e6"
+};
+
+function fmt(x, digits) {
+  if (x === null || x === undefined || Number.isNaN(x)) return "-";
+  const s = new Intl.NumberFormat("en-US", { maximumFractionDigits: digits || 0, minimumFractionDigits: digits || 0 }).format(x);
+  return s.replace(/-/g, "−");
+}
+// Stream-count formatter: round to 2 significant figures, then apply K/M
+// suffixes (66K, 450K, 4.9K, 1.5M, 360). Negatives use the U+2212 minus.
+function trimNum(v) { return v.toFixed(1).replace(/\.0$/, ""); }
+function fmtNum(x) {
+  if (x === null || x === undefined || Number.isNaN(x)) return "-";
+  const neg = x < 0;
+  const a = Math.abs(x);
+  let r;
+  if (a === 0) { r = 0; }
+  else {
+    const factor = Math.pow(10, Math.floor(Math.log10(a)) - 1);
+    r = Math.round(a / factor) * factor;
+  }
+  let out;
+  if (r >= 1e6) out = trimNum(r / 1e6) + "M";
+  else if (r >= 1e3) out = trimNum(r / 1e3) + "K";
+  else out = trimNum(r);
+  return (neg ? "−" : "") + out;
+}
+function pct(x) { return (x * 100).toFixed(1).replace(/-/g, "−") + "%"; }
+function pctSigned(x) { return (x >= 0 ? "+" : "") + (x * 100).toFixed(1).replace(/-/g, "−") + "%"; }
+function range(mean, lo, hi) { return fmtNum(mean) + "<br><span style='color:var(--muted)'>" + fmtNum(lo) + " to " + fmtNum(hi) + "</span>"; }
+function ci(mean, lo, hi) { return fmtNum(mean) + "<span class='ci'>95% CI " + fmtNum(lo) + " to " + fmtNum(hi) + "</span>"; }
+// Three-significant-figure stream-count formatter used only in the Campaign
+// impact table, so its absolute rows visibly sum (114K + 16.0K = 130K). Same
+// K/M suffixes and U+2212 minus as fmtNum, but three significant figures.
+function fmtNum3(x) {
+  if (x === null || x === undefined || Number.isNaN(x)) return "-";
+  const neg = x < 0;
+  const a = Math.abs(x);
+  if (a === 0) return "0";
+  const factor = Math.pow(10, Math.floor(Math.log10(a)) - 2);
+  const r = Math.round(a / factor) * factor;
+  let val, suf;
+  if (r >= 1e6) { val = r / 1e6; suf = "M"; }
+  else if (r >= 1e3) { val = r / 1e3; suf = "K"; }
+  else { val = r; suf = ""; }
+  const intDigits = Math.floor(Math.log10(val)) + 1;
+  const dec = Math.max(0, 3 - intDigits);
+  return (neg ? "−" : "") + val.toFixed(dec) + suf;
+}
+function ci3(mean, lo, hi) { return fmtNum3(mean) + "<span class='ci'>95% CI " + fmtNum3(lo) + " to " + fmtNum3(hi) + "</span>"; }
+
+const baseLayout = (yTitle) => ({
+  margin: { l: 64, r: 16, t: 10, b: 40 },
+  height: 380,
+  paper_bgcolor: "#ffffff",
+  plot_bgcolor: "#ffffff",
+  font: { color: C.ink, size: 12 },
+  xaxis: { gridcolor: C.grid, zeroline: false },
+  yaxis: { title: yTitle, gridcolor: C.grid, zeroline: false },
+  legend: { orientation: "h", x: 0, y: 1.12, font: { size: 11 } },
+  hovermode: "x unified"
+});
+const cfg = { responsive: true, displayModeBar: false };
+
+function campaignShape(xdate) {
+  return {
+    type: "line", x0: xdate, x1: xdate, y0: 0, y1: 1, yref: "paper",
+    line: { color: "#9aa5b1", width: 1.2, dash: "dash" }
+  };
+}
+function campaignAnno(xdate) {
+  return { x: xdate, y: 1, yref: "paper", text: "campaign start", showarrow: false,
+    font: { color: "#616e7c", size: 10 }, xanchor: "left", yanchor: "top", xshift: 4 };
+}
+function zeroShape() {
+  return { type: "line", x0: 0, x1: 1, xref: "paper", y0: 0, y1: 0, line: { color: "#9aa5b1", width: 1 } };
+}
+
+function forecastChart(div, d) {
+  const dts = d.dates, cs = d.campaign_start_date;
+  const post = d.post_dates;
+  const cfPost = d.counterfactual_mean.slice(d.campaign_start_index);
+  const obsPost = d.observed.slice(d.campaign_start_index);
+  const traces = [
+    { x: dts, y: d.counterfactual_hi, mode: "lines", line: { width: 0 }, hoverinfo: "skip", showlegend: false },
+    { x: dts, y: d.counterfactual_lo, mode: "lines", line: { width: 0 }, fill: "tonexty",
+      fillcolor: C.band, name: "counterfactual 95% credible interval", hoverinfo: "skip" },
+    { x: dts, y: d.counterfactual_mean, mode: "lines", line: { color: C.counter, width: 2, dash: "dash" },
+      name: "counterfactual (posterior mean)" },
+    { x: dts, y: d.observed, mode: "lines", line: { color: C.ink, width: 1.8 }, name: "observed streams" },
+    { x: post, y: cfPost, mode: "lines", line: { width: 0 }, hoverinfo: "skip", showlegend: false },
+    { x: post, y: obsPost, mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: C.effectFill,
+      name: "attributed (observed − counterfactual)", hoverinfo: "skip" }
+  ];
+  const lay = baseLayout("daily streams");
+  lay.shapes = [campaignShape(cs)];
+  lay.annotations = [campaignAnno(cs)];
+  Plotly.newPlot(div, traces, lay, cfg);
+}
+
+function pointwiseChart(div, d) {
+  const dts = d.dates, cs = d.campaign_start_date;
+  const traces = [
+    { x: dts, y: d.pointwise_hi, mode: "lines", line: { width: 0 }, hoverinfo: "skip", showlegend: false },
+    { x: dts, y: d.pointwise_lo, mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: C.band,
+      name: "95% credible interval", hoverinfo: "skip" },
+    { x: dts, y: d.pointwise_mean, mode: "lines", line: { color: C.effect, width: 1.8 }, name: "posterior mean effect" }
+  ];
+  const lay = baseLayout("daily extra streams");
+  lay.height = 320;
+  lay.shapes = [campaignShape(cs), zeroShape()];
+  lay.annotations = [campaignAnno(cs)];
+  Plotly.newPlot(div, traces, lay, cfg);
+}
+
+function cumulativeChart(div, d) {
+  const dts = d.post_dates;
+  const traces = [
+    { x: dts, y: d.cumulative_hi, mode: "lines", line: { width: 0 }, hoverinfo: "skip", showlegend: false },
+    { x: dts, y: d.cumulative_lo, mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: C.band,
+      name: "95% credible interval", hoverinfo: "skip" },
+    { x: dts, y: d.cumulative_mean, mode: "lines", line: { color: C.effect, width: 2 }, name: "cumulative effect (mean)" }
+  ];
+  const lay = baseLayout("cumulative extra streams");
+  lay.height = 320;
+  lay.shapes = [zeroShape()];
+  Plotly.newPlot(div, traces, lay, cfg);
+}
+
+function ppcChart(div, d) {
+  const p = d.ppc;
+  const traces = [
+    { x: p.dates_pre, y: p.post_hi, mode: "lines", line: { width: 0 }, hoverinfo: "skip", showlegend: false },
+    { x: p.dates_pre, y: p.post_lo, mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: C.band,
+      name: "posterior predictive 95%", hoverinfo: "skip" },
+    { x: p.dates_pre, y: p.post_med, mode: "lines", line: { color: C.counter, width: 1.6 }, name: "posterior predictive median" },
+    { x: p.dates_pre, y: p.observed_pre, mode: "lines", line: { color: C.ink, width: 1.4 }, name: "observed (pre-period)" }
+  ];
+  const lay = baseLayout("daily streams");
+  lay.height = 320;
+  Plotly.newPlot(div, traces, lay, cfg);
+}
+
+function rhatChart(div, d) {
+  const traces = [
+    { x: d.rhat_values, type: "histogram", marker: { color: C.band, line: { color: "#5b7c95", width: 1 } },
+      name: "R-hat", nbinsx: 24 }
+  ];
+  const lay = baseLayout("parameters");
+  lay.height = 300;
+  lay.xaxis.title = "R-hat";
+  lay.showlegend = false;
+  lay.shapes = [{ type: "line", x0: 1.01, x1: 1.01, y0: 0, y1: 1, yref: "paper",
+    line: { color: C.bad, width: 1.5, dash: "dash" } }];
+  lay.annotations = [{ x: 1.01, y: 1, yref: "paper", text: "1.01 threshold", showarrow: false,
+    font: { color: C.bad, size: 10 }, xanchor: "left", yanchor: "top", xshift: 3 }];
+  Plotly.newPlot(div, traces, lay, cfg);
+}
+
+// Campaign impact against a single consistent reference: the pre-campaign
+// baseline. Weekly averages divide the committed campaign totals by the number
+// of weeks (n_post / 7), the same convention as the committed pre_weekly_mean
+// field. The relative-change column is additive: observed = expected +
+// attributed, each measured as a fraction of the pre-campaign baseline.
+function impactTable(d) {
+  const t = d.totals;
+  const weeks = t.n_post / 7;
+  const preWk = t.pre_weekly_mean;
+  // Pre-campaign campaign total: the observed total over a window equal to the
+  // campaign length immediately before the start date. Taken from the committed
+  // observed series, falling back to pre_weekly_mean times the number of weeks.
+  const cs = d.campaign_start_index, npost = t.n_post, m0 = cs - npost;
+  const preTotal = (m0 >= 0)
+    ? d.observed.slice(m0, cs).reduce((a, b) => a + b, 0)
+    : preWk * weeks;
+  const obsWk = t.post_observed_total / weeks;
+  const cfWk = t.cf_total_mean / weeks, cfWkLo = t.cf_total_lo / weeks, cfWkHi = t.cf_total_hi / weeks;
+  const attWk = t.att_total_mean / weeks, attWkLo = t.att_total_lo / weeks, attWkHi = t.att_total_hi / weeks;
+  const relObs = (obsWk - preWk) / preWk;
+  const relCf = (cfWk - preWk) / preWk;
+  const relAtt = attWk / preWk;
+  return `<table><caption>Campaign impact</caption>
+    <thead><tr><th>Metric</th><th>Weekly average</th><th>Campaign total</th><th>Relative change (%)</th></tr></thead>
+    <tbody>
+      <tr><td>Pre-campaign<sup>&dagger;</sup></td><td>${fmtNum3(preWk)}</td><td>${fmtNum3(preTotal)}</td><td>-</td></tr>
+      <tr><td>Expected without the campaign</td><td>${ci3(cfWk, cfWkLo, cfWkHi)}</td><td>${ci3(t.cf_total_mean, t.cf_total_lo, t.cf_total_hi)}</td><td>${pctSigned(relCf)}</td></tr>
+      <tr><td>Observed during campaign</td><td>${fmtNum3(obsWk)}</td><td>${fmtNum3(t.post_observed_total)}</td><td>${pctSigned(relObs)}</td></tr>
+      <tr class="total"><td>Attributed to the campaign</td><td>${ci3(attWk, attWkLo, attWkHi)}</td><td>${ci3(t.att_total_mean, t.att_total_lo, t.att_total_hi)}</td><td>${pctSigned(relAtt)}</td></tr>
+    </tbody></table>
+    <p class="tnote"><sup>&dagger;</sup> The campaign total for the pre-campaign row is measured over a window equal to the campaign length, immediately before the start date.</p>`;
+}
+
+// The full week-by-week numbers, kept available but folded away by default.
+function weekDetail(d) {
+  const t = d.totals;
+  let pre = `<table><caption>Pre-campaign weekly streams</caption>
+    <thead><tr><th>week</th><th>observed streams</th></tr></thead><tbody>`;
+  d.weeks_pre.forEach(w => { pre += `<tr><td>${w.label}</td><td>${fmtNum(w.observed)}</td></tr>`; });
+  pre += `<tr class="total"><td>pre-campaign total</td><td>${fmtNum(t.pre_observed_total)}</td></tr></tbody></table>`;
+
+  let post = `<table><caption>Peri-campaign weekly figures</caption>
+    <thead><tr><th>week</th><th>observed</th><th>forecast mean (lo to hi)</th><th>attributed mean (lo to hi)</th></tr></thead><tbody>`;
+  d.weeks_post.forEach(w => {
+    post += `<tr><td>${w.label}</td><td>${fmtNum(w.observed)}</td>
+      <td>${range(w.cf_mean, w.cf_lo, w.cf_hi)}</td>
+      <td>${range(w.att_mean, w.att_lo, w.att_hi)}</td></tr>`;
+  });
+  post += `<tr class="total"><td>campaign total</td><td>${fmtNum(t.post_observed_total)}</td>
+      <td>${range(t.cf_total_mean, t.cf_total_lo, t.cf_total_hi)}</td>
+      <td>${range(t.att_total_mean, t.att_total_lo, t.att_total_hi)}</td></tr></tbody></table>`;
+  return `<details class="weekfold"><summary>Week by week detail</summary>
+    <div><div>${pre}</div><div style="margin-top:16px">${post}</div></div></details>`;
+}
+
+function render(d) {
+  const c = d.conv || d.convergence;
+  const el = document.getElementById("content");
+  el.innerHTML = `
+    <div class="verdict">
+      <div class="tag">Stakeholder communication</div>
+      <p>${d.verdict}</p>
+    </div>
+
+    <div class="card">
+      <h2>Forecast and attributed streams</h2>
+      <p class="sub">Observed series, posterior counterfactual mean with its 95% credible-interval band, and the shaded attributed area between observed and counterfactual over the campaign window.</p>
+      <div class="plot" id="p_forecast"></div>
+    </div>
+
+    <div class="card">
+      <h2>Campaign impact</h2>
+      <p class="sub">What the campaign did, and the numbers to defend it. Every row is compared against the same pre-campaign baseline: the streams expected had the campaign not run (the no-campaign counterfactual, with its 95% credible interval), the observed streams during the campaign, and the difference attributed to the campaign. Totals are over the full campaign window.</p>
+      ${impactTable(d)}
+      <div style="margin-top:14px" class="diag diag2">
+        <div class="stat"><div class="k">interval spans zero</div><div class="v">${d.totals.spans_zero ? "yes" : "no"}</div></div>
+        <div class="stat"><div class="k">campaign length</div><div class="v">${d.totals.n_post} days</div></div>
+      </div>
+      <div style="margin-top:14px">${weekDetail(d)}</div>
+    </div>
+
+    <div class="card">
+      <h2>Detailed effect charts</h2>
+      <p class="sub">Pointwise daily effect and cumulative effect, each with the 95% credible interval and a zero reference line.</p>
+      <div class="grid2">
+        <div><div class="plot" id="p_point"></div></div>
+        <div><div class="plot" id="p_cum"></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Bayesian diagnostics</h2>
+      <p class="sub">Convergence summary, a posterior predictive check on the pre-period, and the distribution of R-hat across sampled parameters.</p>
+      <div class="diag">
+        <div class="stat"><div class="k">max R-hat</div><div class="v">${c.max_rhat.toFixed(3)}</div></div>
+        <div class="stat"><div class="k">min ESS (bulk)</div><div class="v">${fmt(c.min_ess_bulk)}</div></div>
+        <div class="stat"><div class="k">divergences</div><div class="v">${c.divergences} / ${c.n_samples}</div></div>
+        <div class="stat"><div class="k">min BFMI</div><div class="v">${c.min_bfmi.toFixed(2)}</div></div>
+      </div>
+      <div class="grid2">
+        <div><div class="plot" id="p_ppc"></div></div>
+        <div><div class="plot" id="p_rhat"></div></div>
+      </div>
+    </div>
+  `;
+  forecastChart("p_forecast", d);
+  pointwiseChart("p_point", d);
+  cumulativeChart("p_cum", d);
+  ppcChart("p_ppc", d);
+  rhatChart("p_rhat", d);
+}
+
+let SCENARIOS = {};
+let ACTIVE = null;
+
+function activate(id) {
+  ACTIVE = id;
+  document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.id === id));
+  render(SCENARIOS[id]);
+}
+
+async function boot() {
+  const manifest = await (await fetch("data/manifest.json")).json();
+  const tabsEl = document.getElementById("tabs");
+  const loaded = await Promise.all(manifest.scenarios.map(async s => {
+    const d = await (await fetch(s.file)).json();
+    return [s, d];
+  }));
+  loaded.forEach(([s, d]) => {
+    SCENARIOS[s.id] = d;
+    const btn = document.createElement("button");
+    btn.className = "tab";
+    btn.dataset.id = s.id;
+    btn.textContent = s.short_label;
+    btn.title = s.label;
+    btn.onclick = () => activate(s.id);
+    tabsEl.appendChild(btn);
+  });
+  activate(manifest.scenarios[0].id);
+}
+
+boot().catch(e => {
+  document.getElementById("content").innerHTML =
+    "<div class='loading'>Failed to load scenario data. Serve this folder over HTTP (see demo.sh) rather than opening the file directly.<br><br>" + e + "</div>";
+});
+</script>
+</body>
+</html>

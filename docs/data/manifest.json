@@ -1,0 +1,53 @@
+{
+  "scenarios": [
+    {
+      "id": "scenario_1",
+      "label": "Growing trend: real lift on top of the climb",
+      "short_label": "Growing positive",
+      "trend": "growing",
+      "file": "data/scenario_1.json"
+    },
+    {
+      "id": "scenario_2",
+      "label": "Growing trend: effect not distinguishable from zero",
+      "short_label": "Growing neutral",
+      "trend": "growing",
+      "file": "data/scenario_2.json"
+    },
+    {
+      "id": "scenario_3",
+      "label": "Growing trend: measured negative reads as zero",
+      "short_label": "Growing negative",
+      "trend": "growing",
+      "file": "data/scenario_3.json"
+    },
+    {
+      "id": "scenario_4",
+      "label": "Flat trend: a clear lift from a flat baseline",
+      "short_label": "Flat positive",
+      "trend": "flat",
+      "file": "data/scenario_4.json"
+    },
+    {
+      "id": "scenario_5",
+      "label": "Declining trend: effect not distinguishable from zero",
+      "short_label": "Declining neutral",
+      "trend": "declining",
+      "file": "data/scenario_5.json"
+    },
+    {
+      "id": "scenario_6",
+      "label": "Declining trend: the ad slowed the decline",
+      "short_label": "Declining slowed",
+      "trend": "declining",
+      "file": "data/scenario_6.json"
+    },
+    {
+      "id": "scenario_7",
+      "label": "Declining trend: the ad reversed the decline",
+      "short_label": "Declining reversed",
+      "trend": "declining",
+      "file": "data/scenario_7.json"
+    }
+  ]
+}
